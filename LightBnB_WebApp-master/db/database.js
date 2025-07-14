@@ -1,5 +1,13 @@
 const properties = require("./json/properties.json");
 const users = require("./json/users.json");
+const { Pool } = require("pg");
+
+const pool = new Pool({
+  user: "development",
+  password: "development",
+  host: "localhost",
+  database: "lightbnb",
+});
 
 /// Users
 
@@ -9,14 +17,23 @@ const users = require("./json/users.json");
  * @return {Promise<{}>} A promise to the user.
  */
 const getUserWithEmail = function (email) {
-  let resolvedUser = null;
-  for (const userId in users) {
-    const user = users[userId];
-    if (user && user.email.toLowerCase() === email.toLowerCase()) {
-      resolvedUser = user;
-    }
-  }
-  return Promise.resolve(resolvedUser);
+   return pool
+    .query(
+      `
+      SELECT *
+      FROM users
+      WHERE users.email = $1;
+      `,
+      [email]
+    )
+    .then((result) => {
+      console.log(result);
+      return result.rows[0] || null;
+    })
+    .catch((err) => {
+      console.log(err.message);
+      throw err;
+    });
 };
 
 /**
@@ -25,19 +42,56 @@ const getUserWithEmail = function (email) {
  * @return {Promise<{}>} A promise to the user.
  */
 const getUserWithId = function (id) {
-  return Promise.resolve(users[id]);
+  return pool
+    .query(
+      `
+      SELECT *
+      FROM users
+      WHERE users.id = $1;
+      `,
+      [id]
+    )
+    .then((result) => {
+      console.log(result);
+      return result.rows[0] || null;
+    })
+    .catch((err) => {
+      console.log(err.message);
+      throw err;
+    });
+  
 };
 
 /**
  * Add a new user to the database.
  * @param {{name: string, password: string, email: string}} user
  * @return {Promise<{}>} A promise to the user.
+ * addUser
+Accepts a user object that will have a name, email, and password property
+This function should insert the new user into the database.
+It will return a promise that resolves with the new user object. 
+This object should contain the user's id after it's been added to the database.
+Add RETURNING *; to the end of an INSERT query to return the objects that were inserted.
+This is handy when you need the auto generated id of an object you've just added to the database.
  */
 const addUser = function (user) {
-  const userId = Object.keys(users).length + 1;
-  user.id = userId;
-  users[userId] = user;
-  return Promise.resolve(user);
+   return pool
+    .query(
+      `
+      INSERT INTO users (name, email, password)
+      VALUES ($1,$2,$3)
+      `,
+      [user.name, user.email, user.password]
+    )
+    .then((result) => {
+      console.log(result);
+      return result.rows[0] || null;
+    })
+    .catch((err) => {
+      console.log(err.message);
+      throw err;
+    });
+  
 };
 
 /// Reservations
@@ -60,11 +114,22 @@ const getAllReservations = function (guest_id, limit = 10) {
  * @return {Promise<[{}]>}  A promise to the properties.
  */
 const getAllProperties = function (options, limit = 10) {
-  const limitedProperties = {};
-  for (let i = 1; i <= limit; i++) {
-    limitedProperties[i] = properties[i];
-  }
-  return Promise.resolve(limitedProperties);
+ return pool
+    .query(
+      `
+      SELECT *
+      FROM properties
+      LIMIT $1;
+     `,
+      [limit]
+    )
+    .then((result) => {
+      return result.rows;
+    })
+    .catch((err) => {
+      console.log(err.message);
+    });
+
 };
 
 /**
