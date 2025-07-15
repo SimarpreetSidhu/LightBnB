@@ -107,7 +107,7 @@ const getAllReservations = function(guest_id, limit = 10) {
       ORDER BY reservations.start_date
       LIMIT $2;
      `,
-      [guest_id,limit]
+      [guest_id, limit]
     )
     .then((result) => {
       return result.rows;
@@ -126,24 +126,73 @@ const getAllReservations = function(guest_id, limit = 10) {
  * @param {*} limit The number of results to return.
  * @return {Promise<[{}]>}  A promise to the properties.
  */
-const getAllProperties = function(options, limit = 10) {
-  return pool
-    .query(
-      `
-      SELECT *
-      FROM properties
-      LIMIT $1;
-     `,
-      [limit]
-    )
-    .then((result) => {
-      return result.rows;
-    })
-    .catch((err) => {
-      console.log(err.message);
-    });
+const getAllProperties = function (options, limit = 10) {
+  const queryParams = [];
+  let queryString = `
+    SELECT properties.*, AVG(property_reviews.rating) AS average_rating
+    FROM properties
+    LEFT JOIN property_reviews ON properties.id = property_reviews.property_id
+  `;
 
+  const conditions = [];
+
+  // City filter
+  if (options.city) {
+    queryParams.push(`%${options.city}%`);
+    conditions.push(`city LIKE $${queryParams.length}`);
+  }
+
+  // Owner ID filter
+  if (options.owner_id) {
+    queryParams.push(options.owner_id);
+    conditions.push(`owner_id = $${queryParams.length}`);
+  }
+
+  // Minimum price filter (in cents)
+  if (options.minimum_price_per_night) {
+    queryParams.push(Number(options.minimum_price_per_night) * 100);
+    conditions.push(`cost_per_night >= $${queryParams.length}`);
+  }
+
+  // Maximum price filter (in cents)
+  if (options.maximum_price_per_night) {
+    queryParams.push(Number(options.maximum_price_per_night) * 100);
+    conditions.push(`cost_per_night <= $${queryParams.length}`);
+  }
+
+  // Add WHERE clause
+  if (conditions.length > 0) {
+    queryString += `WHERE ${conditions.join(' AND ')}\n`;
+  }
+
+  // Grouping
+  queryString += `GROUP BY properties.id\n`;
+
+  // Minimum rating filter using COALESCE
+  if (options.minimum_rating) {
+    queryParams.push(Number(options.minimum_rating));
+    queryString += `HAVING COALESCE(AVG(property_reviews.rating), 0) >= $${queryParams.length}\n`;
+  }
+
+  // Ordering and limit
+  queryParams.push(limit);
+  queryString += `ORDER BY cost_per_night
+                  LIMIT $${queryParams.length};`;
+
+  // Debugging output
+  console.log('QUERY STRING:', queryString);
+  console.log('QUERY PARAMS:', queryParams);
+
+  // Execute query
+  return pool.query(queryString, queryParams)
+    .then(res => res.rows)
+    .catch(err => {
+      console.error('Query Error:', err.message);
+      throw err;
+    });
 };
+
+
 
 /**
  * Add a property to the database
